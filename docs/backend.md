@@ -62,13 +62,13 @@ Create a `.env` in the `streamfi-backend/` root (copy from `.env.example`):
 
 ```env
 PORT=8000
-DATABASE_URL="mongodb://db:27017/streamfi"
+DATABASE_URL="mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/streamfi?retryWrites=true&w=majority"
 JWT_SECRET="your-secret"
 JWT_EXPIRES_IN="1d"
 # other keys: STRIPE_SECRET_KEY, JSON_RPC_PROVIDER, STREAMFI_CONTRACT_ADDRESS, ADMIN_PRIVATE_KEY, etc.
 ```
 
-> When running with Docker Compose, the `DATABASE_URL` host should be the database service name (e.g., `db`).
+> Docker Compose uses the same Atlas `DATABASE_URL`; no local Mongo container is used.
 
 `src/config/environment.ts` should parse and validate env vars (Zod recommended) and export a typed `env` object.
 
@@ -85,9 +85,9 @@ docker compose up --build
 * Backend will be available on `http://localhost:<PORT>` (default 8000).
 * Logs will stream into your terminal.
 
-### Database
+### Database (Atlas-only)
 
-No migration step is required. Mongoose models are defined in `src/lib/mongo.ts`.
+No migration step is required. The app connects to MongoDB Atlas via `DATABASE_URL`. Mongoose models are defined in `src/lib/mongo.ts`.
 
 ---
 

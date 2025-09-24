@@ -21,6 +21,7 @@ const mongo_1 = require("../lib/mongo");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const environment_1 = require("../config/environment");
 const yellow_service_1 = require("../services/yellow.service");
+const clearing_node_service_1 = require("../services/clearing-node.service");
 const router = (0, express_1.Router)();
 router.use('/auth', rateLimiter_1.authBurstLimiter, auth_routes_1.default);
 router.use('/stream', stream_routes_1.default);
@@ -38,6 +39,7 @@ router.use('/channels', channel_routes_1.default);
 router.get('/debug/nitrolite', async (_req, res) => {
     try {
         const ready = yellow_service_1.yellowService.isReady?.() ?? false;
+        const admin = await yellow_service_1.yellowService.getAdminStatus?.();
         const out = {
             ready,
             chainId: environment_1.env.yellow.chainId,
@@ -45,8 +47,20 @@ router.get('/debug/nitrolite', async (_req, res) => {
             adjudicator: environment_1.env.nitrolite.adjudicator,
             token: environment_1.env.nitrolite.token,
             vault: environment_1.env.nitrolite.vault,
+            admin,
         };
         return res.json(out);
+    }
+    catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+// Check on-chain channel by id
+router.get('/debug/channel/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const onchain = await yellow_service_1.yellowService.getOnchainChannel(id);
+        return res.json({ ok: true, onchain });
     }
     catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
@@ -80,4 +94,22 @@ router.get('/debug/auth', async (req, res) => {
     }
 });
 exports.default = router;
+// P2P helper routes (non-auth for local testing; tighten later)
+router.get('/p2p/health', (_req, res) => {
+    return res.json({ ok: true, ...clearing_node_service_1.clearingNodeService.getHealth() });
+});
+router.get('/p2p/latest/:channelId', (req, res) => {
+    const out = clearing_node_service_1.clearingNodeService.getLatest(req.params.channelId);
+    return res.json({ ok: true, latest: out });
+});
+router.post('/p2p/publish', async (req, res) => {
+    try {
+        const { topic, envelope } = req.body || {};
+        const ok = await clearing_node_service_1.clearingNodeService.publish(String(topic || ''), envelope);
+        return res.json({ ok });
+    }
+    catch (e) {
+        return res.status(400).json({ ok: false, error: e.message });
+    }
+});
 //# sourceMappingURL=index.js.map

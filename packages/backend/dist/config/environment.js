@@ -28,7 +28,8 @@ const envSchema = zod_1.z.object({
     // --- Blockchain (Web3) ---
     JSON_RPC_PROVIDER: zod_1.z.string().url('JSON_RPC_PROVIDER must be a valid RPC URL.'),
     CREATOR_VAULT_ADDRESS: zod_1.z.string().startsWith('0x', 'Contract address must be a valid hex string.'),
-    ADMIN_PRIVATE_KEY: zod_1.z.string().startsWith('0x', 'Admin private key must be a valid hex string.'),
+    ADMIN_PRIVATE_KEY: zod_1.z.string().startsWith('0x', 'Admin private key must be a valid hex string.')
+        .refine(v => !/^0x0+$/.test(v), 'ADMIN_PRIVATE_KEY cannot be all zeros placeholder'),
     // Contract deploy block to bound event scans (required)
     NITROLITE_DEPLOY_BLOCK: zod_1.z.coerce.number().int().nonnegative(),
     // --- Payments ---

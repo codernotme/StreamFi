@@ -1,0 +1,47 @@
+{
+	"abi": [
+		{ "type": "event", "name": "Transfer", "anonymous": false, "inputs": [
+			{ "indexed": true, "name": "from", "type": "address" },
+			{ "indexed": true, "name": "to", "type": "address" },
+			{ "indexed": true, "name": "tokenId", "type": "uint256" }
+		] },
+		{ "type": "event", "name": "VaultCreated", "anonymous": false, "inputs": [
+			{ "indexed": true, "name": "vaultId", "type": "uint256" },
+			{ "indexed": true, "name": "owner", "type": "address" }
+		] },
+		{ "type": "event", "name": "Deposit", "anonymous": false, "inputs": [
+			{ "indexed": true, "name": "vaultId", "type": "uint256" },
+			{ "indexed": true, "name": "sender", "type": "address" },
+			{ "indexed": false, "name": "amount", "type": "uint256" }
+		] },
+		{ "type": "function", "name": "createVault", "stateMutability": "nonpayable", "inputs": [
+			{ "name": "owner", "type": "address" }
+		], "outputs": [ { "name": "vaultId", "type": "uint256" } ] },
+		{ "type": "function", "name": "deposit", "stateMutability": "payable", "inputs": [
+			{ "name": "vaultId", "type": "uint256" }
+		], "outputs": [] },
+		{ "type": "function", "name": "withdraw", "stateMutability": "nonpayable", "inputs": [
+			{ "name": "vaultId", "type": "uint256" },
+			{ "name": "receiver", "type": "address" },
+			{ "name": "amount", "type": "uint96" }
+		], "outputs": [] },
+		{ "type": "function", "name": "withdrawWithSignature", "stateMutability": "nonpayable", "inputs": [
+			{ "name": "vaultId", "type": "uint256" },
+			{ "name": "receiver", "type": "address" },
+			{ "name": "amount", "type": "uint96" },
+			{ "name": "signature", "type": "bytes" }
+		], "outputs": [] },
+		{ "type": "function", "name": "nonces", "stateMutability": "view", "inputs": [
+			{ "name": "vaultId", "type": "uint256" }
+		], "outputs": [ { "name": "", "type": "uint64" } ] },
+		{ "type": "function", "name": "balanceOfVault", "stateMutability": "view", "inputs": [
+			{ "name": "vaultId", "type": "uint256" }
+		], "outputs": [ { "name": "", "type": "uint256" } ] },
+		{ "type": "function", "name": "ownerOf", "stateMutability": "view", "inputs": [
+			{ "name": "tokenId", "type": "uint256" }
+		], "outputs": [ { "name": "owner", "type": "address" } ] },
+		{ "type": "function", "name": "tokenURI", "stateMutability": "view", "inputs": [
+			{ "name": "tokenId", "type": "uint256" }
+		], "outputs": [ { "name": "uri", "type": "string" } ] }
+	]
+}

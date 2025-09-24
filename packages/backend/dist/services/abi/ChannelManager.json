@@ -1,5 +1,16 @@
 {
     "abi": [
+        { "type": "event", "name": "ChannelOpened", "inputs": [
+                { "name": "channelId", "type": "bytes32", "indexed": true },
+                { "name": "viewer", "type": "address", "indexed": true },
+                { "name": "vaultId", "type": "uint256", "indexed": true },
+                { "name": "deposit", "type": "uint256", "indexed": false }
+            ], "anonymous": false },
+        { "type": "event", "name": "ChannelClosed", "inputs": [
+                { "name": "channelId", "type": "bytes32", "indexed": true },
+                { "name": "spent", "type": "uint256", "indexed": false },
+                { "name": "settler", "type": "address", "indexed": false }
+            ], "anonymous": false },
         { "type": "function", "name": "openChannel", "stateMutability": "payable", "inputs": [
                 { "name": "viewer", "type": "address" },
                 { "name": "streamIdHash", "type": "bytes32" },
@@ -8,6 +19,13 @@
         { "type": "function", "name": "closeChannel", "stateMutability": "nonpayable", "inputs": [
                 { "name": "channelId", "type": "bytes32" },
                 { "name": "spent", "type": "uint256" }
-            ], "outputs": [] }
+            ], "outputs": [] },
+        { "type": "function", "name": "channels", "stateMutability": "view", "inputs": [{ "name": "", "type": "bytes32" }], "outputs": [
+                { "name": "viewer", "type": "address" },
+                { "name": "vaultId", "type": "uint256" },
+                { "name": "deposit", "type": "uint256" },
+                { "name": "spent", "type": "uint256" },
+                { "name": "closed", "type": "bool" }
+            ] }
     ]
 }

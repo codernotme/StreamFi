@@ -1,44 +1,68 @@
 # ------------------------
 # Stage 1: Build
 # ------------------------
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
-# Install system dependencies needed for build
 RUN apk add --no-cache openssl curl
 
-# Install all dependencies (including dev) for build
-COPY package*.json ./
-RUN npm install
+ENV NPM_CONFIG_FETCH_RETRIES=6 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=300000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000 \
+    NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
-# Copy source and compile
+COPY package*.json ./
+COPY package-lock.json ./
+# Optionally reuse host node_modules to skip network install during builds
+ARG USE_HOST_NODE_MODULES=false
+COPY node_modules ./node_modules
+# Deterministic installs; allow peer conflicts in CI
+RUN if [ "$USE_HOST_NODE_MODULES" = "true" ]; then \
+            echo "Using host node_modules"; \
+        else \
+            rm -rf node_modules && npm ci --legacy-peer-deps --registry="$NPM_CONFIG_REGISTRY"; \
+        fi \
+    && npm cache verify
+
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
+
+# Ensure TS is available (if not already in devDeps)
+RUN npm install --include=dev typescript
+
+RUN npx tsc -p tsconfig.json
 
 # ------------------------
 # Stage 2: Runtime
 # ------------------------
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /usr/src/app
 
-# Install system dependencies needed at runtime
 RUN apk add --no-cache openssl curl
 
-# Install only production deps
-COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+# Make npm more resilient in runtime stage too
+ENV NPM_CONFIG_FETCH_RETRIES=6 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=300000 \
+    NPM_CONFIG_FETCH_TIMEOUT=300000 \
+    NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
-# Copy compiled app from builder
+COPY package*.json ./
+COPY package-lock.json ./
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+RUN npm prune --omit=dev \
+    && npm cache clean --force
+
 COPY --from=builder /usr/src/app/dist ./dist
 
-# Copy entrypoint script
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN sed -i 's/\r$//' ./docker-entrypoint.sh \
     && chmod +x ./docker-entrypoint.sh
 
 EXPOSE 8000
-
 ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -13,23 +13,14 @@ services:
     networks:
       - streamfi-net
 
-  # MongoDB (development)
-  mongo:
-    image: mongo:6.0
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - streamfi-net
+  # MongoDB service removed — Atlas-only mode
 
   # Node Media Server
   nms:
     build:
-      # NOTE: Previously this used ${MEDIA_SERVER_CONTEXT:-./media-server} but the actual path in the repo
-      # is ./packages/media-server. Hardcoding prevents build failures for new contributors who
-      # don't export MEDIA_SERVER_CONTEXT. If you really need to override, edit this file or add
-      # a secondary compose override (docker-compose.override.yml).
+      # Path to the media server in this repo
       context: ./packages/media-server
-      dockerfile: Dockerfilegit 
+      dockerfile: Dockerfile
     ports:
       - "1935:1935"   # RTMP ingest
       - "8081:8080"   # HLS HTTP (external:internal)
@@ -38,21 +29,56 @@ services:
     networks:
       - streamfi-net
 
+  # Clearing Node (P2P relay)
+  clearing-node:
+    build:
+      context: ./packages/clearing-node
+      dockerfile: Dockerfile
+      network: host
+      args:
+        - NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
+    env_file:
+      - ./packages/backend/.env
+    environment:
+      LOG_LEVEL: info
+      P2P_TOPIC_PREFIX: streamfi
+      # libp2p listeners
+      P2P_LISTEN_TCP: /ip4/0.0.0.0/tcp/7003
+      P2P_LISTEN_WS: /ip4/0.0.0.0/tcp/7004/ws
+      # Accept EIP-712 signatures for these verifying contracts (comma-separated)
+      P2P_EIP712_VERIFY_CONTRACTS: "${NITROLITE_ADJUDICATOR_ADDRESS},${NITROLITE_CUSTODY_ADDRESS},${CREATOR_VAULT_ADDRESS}"
+      PORT: 7002
+    ports:
+      - "7001:7001"   # WS gateway for browsers
+      - "7002:7002"   # HTTP health
+      - "7003:7003"   # libp2p TCP
+      - "7004:7004"   # libp2p WS
+    networks:
+      - streamfi-net
+
   # Backend Service
   backend:
     build:
       context: ./packages/backend
       dockerfile: Dockerfile
+      args:
+        - NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
+        - NITROLITE_ADJUDICATOR_ADDRESS=${NITROLITE_ADJUDICATOR_ADDRESS}
+        - NITROLITE_CUSTODY_ADDRESS=${NITROLITE_CUSTODY_ADDRESS}
+        - CREATOR_VAULT_ADDRESS=${CREATOR_VAULT_ADDRESS}
     ports:
       - "8000:8000"
     env_file:
       - ./packages/backend/.env
     environment:
-      DATABASE_URL: ${DATABASE_URL:-mongodb://mongo:27017/streamfi}
       MONGO_DB_NAME: ${MONGO_DB_NAME:-streamfi}
       CSRF_SECURE: "false"
+      # Point backend to the clearing-node service within the Docker network
+      CLEARING_NODE_WS_URL: ws://clearing-node:7001
+      NITROLITE_ADJUDICATOR_ADDRESS: ${NITROLITE_ADJUDICATOR_ADDRESS}
+      NITROLITE_CUSTODY_ADDRESS: ${NITROLITE_CUSTODY_ADDRESS}
+      CREATOR_VAULT_ADDRESS: ${CREATOR_VAULT_ADDRESS}
     depends_on:
-      - mongo
       - nms
     networks:
       - streamfi-net
@@ -86,6 +112,3 @@ services:
 networks:
   streamfi-net:
     driver: bridge
-
-volumes:
-  mongo-data:

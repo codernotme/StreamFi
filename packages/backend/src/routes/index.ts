@@ -16,6 +16,7 @@ import { connectMongo, UserModel } from '../lib/mongo';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/environment';
 import { yellowService } from '../services/yellow.service';
+import { clearingNodeService } from '../services/clearing-node.service';
 
 const router = Router();
 router.use('/auth', authBurstLimiter, authRoutes);
@@ -68,7 +69,9 @@ router.get('/debug/db', async (_req, res) => {
 		const conn = await connectMongo();
 		const state = conn.readyState; // 1 = connected
 		const userCount = await UserModel.estimatedDocumentCount();
-		return res.json({ ok: true, state, userCount, db: conn.name });
+		const host = (conn as any).client?.options?.hosts || (conn as any).client?.s?.hosts || undefined;
+		const url = process.env.DATABASE_URL || undefined;
+		return res.json({ ok: true, state, userCount, db: conn.name, host, url });
 	} catch (e: any) {
 		return res.status(500).json({ ok: false, error: e.message });
 	}
@@ -89,3 +92,21 @@ router.get('/debug/auth', async (req, res) => {
 });
 
 export default router;
+
+// P2P helper routes (non-auth for local testing; tighten later)
+router.get('/p2p/health', (_req, res) => {
+	return res.json({ ok: true, ...clearingNodeService.getHealth() })
+})
+router.get('/p2p/latest/:channelId', (req, res) => {
+	const out = clearingNodeService.getLatest(req.params.channelId)
+	return res.json({ ok: true, latest: out })
+})
+router.post('/p2p/publish', async (req, res) => {
+	try {
+		const { topic, envelope } = req.body || {}
+		const ok = await clearingNodeService.publish(String(topic || ''), envelope)
+		return res.json({ ok })
+	} catch (e: any) {
+		return res.status(400).json({ ok: false, error: e.message })
+	}
+})

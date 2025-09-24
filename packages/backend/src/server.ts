@@ -9,10 +9,19 @@ import { blockchainService } from './services/blockchain.service';
 import { nftIndexer } from './services/nft-indexer.service';
 import { connectMongo } from './lib/mongo';
 import { markReady } from './config/state';
+import { clearingNodeService } from './services/clearing-node.service';
 
 const PORT = env.port || 8000;
 
 const httpServer = http.createServer(app);
+
+// Global hardening: prevent process exit on transient unhandled promise rejections / exceptions.
+process.on('unhandledRejection', (reason: any) => {
+  logger.error({ err: reason instanceof Error ? reason.message : String(reason) }, 'UnhandledRejection (continuing)');
+});
+process.on('uncaughtException', (err: any) => {
+  logger.error({ err: err?.message }, 'UncaughtException caught – keeping process alive');
+});
 
 /**
  * Some Socket.IO type packages (depending on version) omit `cors` in `ServerOptions`.
@@ -46,6 +55,7 @@ async function start() {
     logger.info(`🚀 Server is running on port ${PORT}`);
     if (process.env.NODE_ENV !== 'test') {
       try { blockchainService.listenForDonations(); } catch (e) { logger.warn({ err: e }, 'Blockchain listener init failed'); }
+      try { clearingNodeService.start(); } catch (e) { logger.warn({ err: e }, 'Clearing node service init failed'); }
       // nftIndexer.backfill().then(() => logger.info('✅ NFT backfill complete')).catch((e) => logger.error({ err: e }, 'NFT backfill failed'));
       // nftIndexer.subscribe();
     }

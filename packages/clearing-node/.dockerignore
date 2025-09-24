@@ -1,4 +1,3 @@
-# backend/.dockerignore
 # Allow using host node_modules as a fallback during Docker builds
 !node_modules
 npm-debug.log
@@ -7,5 +6,3 @@ dist
 .env
 .env.local
 .env.production
-.coverage
-.nyc_output

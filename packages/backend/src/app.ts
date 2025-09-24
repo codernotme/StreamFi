@@ -13,6 +13,7 @@ import { errorHandler } from './middlewares/errorHandler';
 import { rateLimiter } from './middlewares/rateLimiter';
 import { pingDatabase } from './lib/mongo';
 import { isReady } from './config/state';
+import { yellowService } from './services/yellow.service';
 import apiRoutes from './routes';
 
 const app = express();
@@ -102,7 +103,14 @@ app.get('/api', (_req, res) => {
 });
 // Explicit API health endpoint for tooling
 app.get('/api/health', async (_req, res) => {
-	return res.status(200).json({ status: 'UP' });
+	let nitro: any = { ready: false };
+	try {
+		nitro.ready = yellowService.isReady();
+		const admin = await yellowService.getAdminStatus?.();
+		const status = (yellowService as any).getStatus?.() || {};
+		nitro = { ...admin, ...status };
+	} catch {}
+	return res.status(200).json({ status: 'UP', nitrolite: nitro });
 });
 // CSRF token issuance for browsers: returns a one-time token bound to the secret cookie
 app.get('/api/csrf', csrfProtection, (req: Request, res: Response) => {
@@ -131,7 +139,14 @@ app.get('/health', async (_req, res) => {
 	} catch {
 		db = 'DOWN';
 	}
-	return res.status(200).json({ status: 'UP', db });
+	let nitro: any = { ready: false };
+	try {
+		nitro.ready = yellowService.isReady();
+		const admin = await yellowService.getAdminStatus?.();
+		const status = (yellowService as any).getStatus?.() || {};
+		nitro = { ...admin, ...status };
+	} catch {}
+	return res.status(200).json({ status: 'UP', db, nitrolite: nitro });
 });
 app.get('/metrics', async (_req, res) => {
 	res.set('Content-Type', client.register.contentType);

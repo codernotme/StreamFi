@@ -13,8 +13,16 @@ const environment_1 = require("./config/environment");
 const blockchain_service_1 = require("./services/blockchain.service");
 const mongo_1 = require("./lib/mongo");
 const state_1 = require("./config/state");
+const clearing_node_service_1 = require("./services/clearing-node.service");
 const PORT = environment_1.env.port || 8000;
 const httpServer = http_1.default.createServer(app_1.default);
+// Global hardening: prevent process exit on transient unhandled promise rejections / exceptions.
+process.on('unhandledRejection', (reason) => {
+    logger_1.logger.error({ err: reason instanceof Error ? reason.message : String(reason) }, 'UnhandledRejection (continuing)');
+});
+process.on('uncaughtException', (err) => {
+    logger_1.logger.error({ err: err?.message }, 'UncaughtException caught – keeping process alive');
+});
 /**
  * Some Socket.IO type packages (depending on version) omit `cors` in `ServerOptions`.
  * It's valid at runtime for v4+, so we cast to `any` for compatibility.
@@ -50,6 +58,12 @@ async function start() {
             }
             catch (e) {
                 logger_1.logger.warn({ err: e }, 'Blockchain listener init failed');
+            }
+            try {
+                clearing_node_service_1.clearingNodeService.start();
+            }
+            catch (e) {
+                logger_1.logger.warn({ err: e }, 'Clearing node service init failed');
             }
             // nftIndexer.backfill().then(() => logger.info('✅ NFT backfill complete')).catch((e) => logger.error({ err: e }, 'NFT backfill failed'));
             // nftIndexer.subscribe();

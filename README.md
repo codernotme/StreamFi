@@ -95,12 +95,16 @@ npm run dev
 
 ## Key features
 
-- Auth & roles (Streamer, Viewer, Admin) with JWT
-- Stream ingest/HLS helpers, HLS player with retry/backoff and quality control
-- Realtime chat + reactions; moderator namespace `/mod/:streamId` with owner/admin checks
-- Donations (Stripe intent + webhooks, UPI/PayPal stubs), CSV export; payout requests
-- NFT indexer (backfill + subscribe) and metadata resolution (IPFS + optional pinning)
-- Metrics: `/health`, `/metrics` (Prometheus); correlation ID sampling logs
+
+### Resilience / Hardening
+
+The backend includes defensive measures to avoid crashes on transient RPC issues:
+- Contract bytecode fetch in Nitrolite (channel) service uses retry with backoff (handles ECONNRESET / timeouts).
+- Global `unhandledRejection` and `uncaughtException` handlers log and keep the process alive.
+- `/health` and `/api/health` now expose Nitrolite readiness + admin signer balance so scripts can wait before starting flows.
+- On-chain operations call an internal `ensureReady()` that lazily re-attempts initialization if prior startup failed.
+
+Automation tip: wait for `/api/health` to report `nitrolite.ready: true` before running channel E2E scripts.
 
 ### Off-Chain Microtransaction Channels (Yellow Prototype)
 

@@ -16,6 +16,10 @@ class YellowService {
   private adjudicator: ethers.Contract;
   private ready = false;
   private initPromise: Promise<void> | null = null;
+  private initAttempts = 0;
+  private lastInitError: string | null = null;
+  private lastInitAt: number | null = null;
+  private lastReadyAt: number | null = null;
 
   constructor() {
     // In tests, avoid network calls and event loop handles
@@ -56,32 +60,55 @@ class YellowService {
 
   private init() {
     if (this.initPromise) return this.initPromise;
-    this.initPromise = Promise.all([
-      this.provider.getCode(env.nitrolite.custody),
-      this.provider.getCode(env.blockchain.creatorVaultAddress),
-      this.provider.getCode(env.nitrolite.token),
-      this.provider.getCode(env.nitrolite.adjudicator),
-    ])
+  this.initAttempts += 1;
+  this.lastInitAt = Date.now();
+    const fetchCodes = async () => {
+      const attempt = async (fn: () => Promise<any>, label: string, tries = 3): Promise<string> => {
+        let lastErr: any;
+        for (let i=0;i<tries;i++) {
+          try { return await fn(); } catch (e:any) {
+            lastErr = e;
+            const transient = /ECONNRESET|socket hang up|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH/i.test(e?.message||'');
+            if (!transient) break;
+            const delay = 400 * (i+1);
+            logger.warn({ err: e?.message, attempt: i+1, delay, label }, 'Transient RPC error; retrying');
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+        throw lastErr;
+      };
+      return Promise.all([
+        attempt(() => this.provider.getCode(env.nitrolite.custody), 'custody'),
+        attempt(() => this.provider.getCode(env.blockchain.creatorVaultAddress), 'vault'),
+        attempt(() => this.provider.getCode(env.nitrolite.token), 'token'),
+        attempt(() => this.provider.getCode(env.nitrolite.adjudicator), 'adjudicator'),
+      ]);
+    };
+    this.initPromise = fetchCodes()
       .then(([chanCode, vaultCode, tokenCode, adjCode]) => {
         if (chanCode === '0x') {
           logger.error('No code at NITROLITE_CUSTODY_ADDRESS – deploy ChannelManager and update env');
           this.ready = false;
+          this.lastInitError = 'missing_channel_manager_code';
           return;
         }
         if (vaultCode === '0x') {
           logger.error('No code at CREATOR_VAULT_ADDRESS – deploy Nitrolite and update env');
           this.ready = false;
+          this.lastInitError = 'missing_vault_code';
           return;
         }
         if (tokenCode === '0x') {
           logger.error('No code at NITROLITE_TOKEN_ADDRESS – deploy token and update env');
-          this.ready = false; return;
+          this.ready = false; this.lastInitError = 'missing_token_code'; return;
         }
         if (adjCode === '0x') {
           logger.error('No code at NITROLITE_ADJUDICATOR_ADDRESS – deploy adjudicator and update env');
-          this.ready = false; return;
+          this.ready = false; this.lastInitError = 'missing_adjudicator_code'; return;
         }
         this.ready = true;
+        this.lastReadyAt = Date.now();
+        this.lastInitError = null;
         logger.info('Sepolia contracts found, nitrolite service ready');
         // Fetch admin signer balance for diagnostics
     this.signer.getAddress().then(addr => this.provider.getBalance(addr).then(bal => {
@@ -95,17 +122,25 @@ class YellowService {
       })
       .catch((e) => {
         this.ready = false;
-        logger.error({ err: e }, 'Contract code validation failed (will keep retrying on use)');
+  this.lastInitError = (e as any)?.message || 'init_failed';
+  logger.error({ err: this.lastInitError, attempts: this.initAttempts }, 'Contract code validation failed (will retry on next demand)');
+  // Critical: allow subsequent calls to init() to retry by clearing cached promise
+  this.initPromise = null;
       });
     return this.initPromise;
   }
 
   public isReady() { return this.ready; }
 
+  private async ensureReady() {
+    if (this.ready) return true;
+    await this.init();
+    return this.ready;
+  }
+
   // Validate a viewer-submitted openChannel transaction and ensure it matches expected args/value
   async validateOpenTx(txHash: string, viewer: string, streamIdOrSalted: string, vaultId: bigint, depositWei: bigint): Promise<{ ok: true }>{
-    if (!this.ready) { await this.init(); }
-    if (!this.ready) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
+  if (!await this.ensureReady()) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
     const tx = await this.provider.getTransaction(txHash);
     if (!tx) throw new Error('open tx not found');
     if ((tx.to || '').toLowerCase() !== String(this.channelManager.target).toLowerCase()) throw new Error('tx to wrong contract');
@@ -127,8 +162,7 @@ class YellowService {
 
   // On-chain open channel tx
   async openChannel(viewer: string, streamIdOrSalted: string, vaultId: bigint, depositWei: bigint): Promise<{ txHash: string }>{
-    if (!this.ready) { await this.init(); }
-    if (!this.ready) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
+  if (!await this.ensureReady()) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
   const streamIdHash = ethers.id(streamIdOrSalted);
   const tx = await this.channelManager.openChannel(viewer, streamIdHash, vaultId, { value: depositWei });
     const rcpt = await tx.wait(1);
@@ -137,8 +171,7 @@ class YellowService {
 
   // On-chain close channel settlement
   async closeChannel(channelId: string, spentWei: bigint): Promise<{ txHash: string }>{
-    if (!this.ready) { await this.init(); }
-    if (!this.ready) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
+  if (!await this.ensureReady()) throw new Error('ChannelManager not ready. Deploy contracts and set env.');
   const tx = await this.channelManager.closeChannel(channelId, spentWei);
   const rcpt = await tx.wait(1);
   return { txHash: rcpt.hash || tx.hash };
@@ -158,6 +191,7 @@ class YellowService {
       return mock;
     }
     try {
+  if (!await this.ensureReady()) throw new Error('Adjudicator not ready');
       // Coerce potential string inputs to bigint for contract call
       const normalized = {
         channelId: state.channelId,
@@ -209,11 +243,29 @@ class YellowService {
   public async getAdminStatus() {
     try {
   const addr = await this.signer.getAddress();
-  const bal = await this.provider.getBalance(addr);
-  return { address: addr, balanceWei: bal.toString(), balanceEth: ethers.formatEther(bal), ready: this.ready };
+  let balStr: string | null = null;
+  let balEth: string | null = null;
+  try {
+    const bal = await this.provider.getBalance(addr);
+    balStr = bal.toString();
+    balEth = ethers.formatEther(bal);
+  } catch (balanceErr:any) {
+    logger.warn({ err: balanceErr?.message }, 'Failed to fetch admin balance');
+  }
+  return { address: addr, balanceWei: balStr, balanceEth: balEth, ready: this.ready };
     } catch (e:any) {
   return { address: null, error: e.message, ready: this.ready };
     }
+  }
+
+  public getStatus() {
+    return {
+      ready: this.ready,
+      attempts: this.initAttempts,
+      lastInitAt: this.lastInitAt,
+      lastReadyAt: this.lastReadyAt,
+      lastInitError: this.lastInitError,
+    };
   }
 }
 
