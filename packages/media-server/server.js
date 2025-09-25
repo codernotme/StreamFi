@@ -12,7 +12,8 @@ const config = {
   http: {
     port: 8080,
     allow_origin: '*',
-    mediaroot: './media',
+    // Use absolute path to avoid cwd confusion
+    mediaroot: '/app/media',
   },
   trans: {
     ffmpeg: process.env.FFMPEG_PATH || '/usr/bin/ffmpeg',
@@ -21,8 +22,11 @@ const config = {
         app: 'live',
         ac: 'aac',
         vc: 'libx264',
+        // Enable HLS output; Node-Media-Server uses FFmpeg tee muxer internally
         hls: true,
-        hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]'
+        // Explicitly set f=hls to ensure tee writes HLS, and use reasonable flags
+        // Keep a short live window; independent_segments improves compatibility
+        hlsFlags: '[f=hls:hls_time=2:hls_list_size=6:hls_flags=delete_segments+independent_segments]'
       }
     ]
   }

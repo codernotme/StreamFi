@@ -21,6 +21,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     // Show ONLY the landing page, no sidebar/layout, if on /landing and not authenticated
     if (pathname === "/landing" && !session) {
         return <ThemeProvider>{children}</ThemeProvider>;
+    } else if (pathname?.startsWith('/watch/')) {
+        // Overlay route: render minimal shell without sidebar/auth gate.
+        return (
+            <Web3Provider>
+                <ThemeProvider>
+                    {children}
+                </ThemeProvider>
+            </Web3Provider>
+        );
     } else {
 
         return (

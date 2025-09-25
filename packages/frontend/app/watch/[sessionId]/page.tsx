@@ -115,6 +115,11 @@ export default function WatchPage() {
             triedAutoOpenRef.current = true;
             openChannelUI();
           }
+        } else if (p?.status === 'IDLE') {
+          // Auto-close when stream ends
+          if (channelId && channelStatus !== 'CLOSED') {
+            closeChannel().catch(() => {});
+          }
         }
       });
       socket.on("reaction_denied", () => {
@@ -320,6 +325,22 @@ export default function WatchPage() {
     finally { setClosing(false); }
   }
 
+  // Best-effort channel close on page unload/navigation
+  useEffect(() => {
+    const handler = () => {
+      try { if (channelId && channelStatus !== 'CLOSED') { void channels.close(channelId); } } catch {}
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => { window.removeEventListener('beforeunload', handler); };
+  }, [channelId, channelStatus]);
+
+  // Close channel on unmount as well
+  useEffect(() => {
+    return () => {
+      try { if (channelId && channelStatus !== 'CLOSED') { void channels.close(channelId); } } catch {}
+    };
+  }, [channelId, channelStatus]);
+
   return (
     <main className="p-4 space-y-4">
       <h1 className="text-xl font-semibold">Stream Overlay</h1>
@@ -408,34 +429,7 @@ export default function WatchPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Channel (Off-chain Micro)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {channelId ? (
-            <div className="space-y-2">
-              <p className="text-xs break-all">ID: {channelId}</p>
-              <p className="text-xs">Vault: {vaultId}</p>
-              <p className="text-xs">Status: {channelStatus ?? '—'}</p>
-              <p className="text-xs">Spent: {(Number(channelSpentWei)/1e18).toFixed(6)} / {(Number(channelDepositWei)/1e18).toFixed(6)} ETH</p>
-              <div className="flex gap-2 items-center">
-                <Input value={tipEth} onChange={e=>setTipEth(e.target.value)} className="w-28" />
-                <Button size="sm" onClick={sendTip} disabled={!address || wrongNetwork || channelStatus !== 'OPEN' || (BigInt(Math.floor(parseFloat(tipEth||'0')*1e18)) < BigInt(minTipWei))}>Send Tip</Button>
-                <Button size="sm" variant="outline" onClick={closeChannel} disabled={closing || channelStatus === 'CLOSED'}>{closing ? 'Closing…' : 'Close'}</Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground">Min Tip {Number(minTipWei)/1e18} ETH</p>
-              {wrongNetwork && <p className="text-[10px] text-red-500">Wrong network. Please switch to chain ID {requiredChainId}.</p>}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Button size="sm" onClick={openChannelUI} disabled={!address || opening || wrongNetwork}>{opening ? 'Opening…' : 'Open Channel'}</Button>
-              <p className="text-[10px] text-muted-foreground">Min Deposit {Number(minDepositWei)/1e18} ETH</p>
-              {wrongNetwork && <p className="text-[10px] text-red-500">Wrong network. Please switch to chain ID {requiredChainId}.</p>}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Manual channel controls removed: channel auto-opens on LIVE and closes on END; reactions handle micro-tips. */}
     </main>
   );
 }

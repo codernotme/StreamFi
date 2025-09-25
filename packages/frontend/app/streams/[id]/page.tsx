@@ -19,8 +19,6 @@ import {
   DialogTrigger,
 } from "../../../components/ui/dialog";
 import { monetization } from "../../../modules/monetization";
-import { blockchain } from "../../../modules/blockchain";
-import { channels, channelTypedData } from "../../../modules/channels";
 import { useAccount } from "wagmi";
 import { useState } from "react";
 import { io, Socket } from "socket.io-client";
@@ -42,15 +40,7 @@ export default function StreamDetailPage() {
   const [owned, setOwned] = useState<{ tokenId: string; tokenURI: string }[]>([]);
   // Channel state
   const session = useAuthStore((s) => s.session);
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const [channelInfo, setChannelInfo] = useState<any | null>(null);
-  const [initInfo, setInitInfo] = useState<any | null>(null);
-  const [depositEth, setDepositEth] = useState<string>("0.0003");
-  const [tipEth, setTipEth] = useState<string>("0.00005");
-  const [tipMsg, setTipMsg] = useState<string>("");
-  const [loadingOpen, setLoadingOpen] = useState(false);
-  const [loadingTip, setLoadingTip] = useState(false);
-  const [loadingClose, setLoadingClose] = useState(false);
+  // Microtips UI removed; overlay handles auto channel + reactions.
 
   useEffect(() => {
     const video = videoRef.current;
@@ -243,89 +233,7 @@ export default function StreamDetailPage() {
                 <ConnectButton chainStatus={{ smallScreen: 'icon', largeScreen: 'full' }} accountStatus={{ smallScreen: 'avatar', largeScreen: 'full' }} />
               </div>
             </div>
-            {/* Tipping channel UI */}
-            <div className="mt-4 rounded-md border p-3 space-y-3">
-              <div className="font-medium">Microtips</div>
-              {!session && (
-                <div className="text-sm text-muted-foreground">Sign in to open a tipping channel.</div>
-              )}
-              {session && !channelId && (
-                <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-muted-foreground">Deposit (ETH)</label>
-                    <Input value={depositEth} onChange={(e)=>setDepositEth(e.target.value)} className="w-40" />
-                  </div>
-                  <Button disabled={loadingOpen || !isConnected} onClick={async ()=>{
-                    try {
-                      setLoadingOpen(true);
-                      const init = await channels.init(String(id));
-                      setInitInfo(init);
-                      const opened = await channels.open(String(id), parseEther(depositEth || '0'));
-                      setChannelId(opened.channelId);
-                      const ch = await channels.get(opened.channelId);
-                      setChannelInfo(ch);
-                    } catch (e:any) {
-                      alert(e?.message || 'Failed to open');
-                    } finally { setLoadingOpen(false); }
-                  }}>{loadingOpen ? 'Opening…' : 'Open channel'}</Button>
-                </div>
-              )}
-              {session && channelId && channelInfo && (
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Channel: {channelId.slice(0,10)}… • Spent {formatEther(BigInt(channelInfo.spentWei||'0'))} / {formatEther(BigInt(channelInfo.depositWei||'0'))} ETH • Nonce {Number(channelInfo.nonce)}</div>
-                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-end">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Tip (ETH)</label>
-                      <Input value={tipEth} onChange={(e)=>setTipEth(e.target.value)} className="w-40" />
-                    </div>
-                    <div className="flex-1 flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Message (optional)</label>
-                      <Input value={tipMsg} onChange={(e)=>setTipMsg(e.target.value)} placeholder="Cheer message" />
-                    </div>
-                    <Button disabled={loadingTip || !isConnected} onClick={async ()=>{
-                      try {
-                        setLoadingTip(true);
-                        const init = initInfo || await channels.init(String(id));
-                        setInitInfo(init);
-                        const ch = channelInfo;
-                        const deposit = BigInt(ch.depositWei);
-                        const spentPrev = BigInt(ch.spentWei || '0');
-                        const tipWei = parseEther(tipEth || '0');
-                        const newSpent = spentPrev + tipWei;
-                        const state = {
-                          channelId: channelId!,
-                          vaultId: BigInt(ch.streamerVaultId),
-                          viewer: (address || '').toLowerCase(),
-                          deposit,
-                          spent: newSpent,
-                          nonce: BigInt(Number(ch.nonce) + 1),
-                        } as const;
-                        const domain = { name: 'StreamFiChannel', version: '1', chainId: Number(init.chainId), verifyingContract: init.channelContract };
-                        const typed = channelTypedData(domain, state);
-                        // Sign via EIP-712 v4
-                        const sig = await (window as any).ethereum?.request?.({ method: 'eth_signTypedData_v4', params: [address, typed] });
-                        const res = await channels.tip({ channelId: channelId!, newSpentWei: newSpent, nonce: Number(state.nonce), signature: sig, message: tipMsg || undefined });
-                        const updated = await channels.get(channelId!);
-                        setChannelInfo(updated);
-                        setTipMsg('');
-                      } catch (e:any) {
-                        alert(e?.message || 'Tip failed');
-                      } finally { setLoadingTip(false); }
-                    }}>{loadingTip ? 'Sending…' : 'Send Tip'}</Button>
-                    <Button variant="outline" disabled={loadingClose} onClick={async ()=>{
-                      try {
-                        setLoadingClose(true);
-                        await channels.close(channelId!);
-                        setChannelId(null);
-                        setChannelInfo(null);
-                      } catch (e:any) {
-                        alert(e?.message || 'Close failed');
-                      } finally { setLoadingClose(false); }
-                    }}>{loadingClose ? 'Closing…' : 'Close channel'}</Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Microtips UI removed. Use the Overlay page for reactions and microtransactions. */}
           </CardContent>
         </Card>
         <Card>

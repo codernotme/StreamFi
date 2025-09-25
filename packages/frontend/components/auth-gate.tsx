@@ -16,7 +16,9 @@ export function AuthGate() {
     const isPublic =
       pathname === "/landing" ||
       pathname === "/signup" ||
-      pathname.startsWith("/auth");
+      pathname.startsWith("/auth") ||
+      // Overlay should be publicly accessible (no auth redirect)
+      pathname.startsWith("/watch/");
 
     // If unauthenticated and route is not public, redirect to /landing
     if (!session && !isPublic) {
